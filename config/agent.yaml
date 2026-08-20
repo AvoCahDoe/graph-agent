@@ -1,0 +1,180 @@
+# Centralized agent behavior. Secrets stay in .env.
+
+agent:
+  name: "Standalone Agent"
+  default_mode: ask
+  recursion_limit: 32
+  max_pack_hops: 3
+  default_pack: billing
+
+modes:
+  ask:
+    max_risk: read_only
+    extra_tools: [ask_user]
+  agent:
+    max_risk: destructive
+
+confirm:
+  mutating: true
+  destructive: true
+
+llm:
+  provider: auto
+  planner_max_tokens: 64
+  specialist_max_tokens_ask: 768
+  specialist_max_tokens_agent: 768
+  message_window_max: 14
+  tool_result_max_chars: 3500
+
+packs:
+  billing:
+    tools:
+      - ask_user
+      - get_invoice
+      - list_invoices
+      - search_invoices
+      - get_client
+      - list_clients
+      - search_clients
+      - get_payment
+      - list_payments
+    keywords:
+      - invoice
+      - invoices
+      - facture
+      - factures
+      - client
+      - clients
+      - customer
+      - payment
+      - payments
+      - paiement
+      - paiements
+      - unpaid
+      - draft
+    hint: |
+      ## Active pack: billing
+      You only have client, invoice, and payment lookup tools. Use them, then stop.
+    prompt: |
+      You handle billing queries (invoices, clients, payments).
+      Always use tools for data. Never invent fields.
+      Match the user's language. Keep IDs and amounts as in records.
+
+  catalog:
+    tools:
+      - ask_user
+      - get_product
+      - list_products
+      - get_stock_level
+      - list_stock_movements
+    keywords:
+      - stock
+      - inventory
+      - inventaire
+      - sku
+      - product
+      - products
+      - produit
+      - produits
+      - warehouse
+      - entrepot
+      - entrepôt
+      - quantity
+    hint: |
+      ## Active pack: catalog
+      You only have product and stock lookup tools. Use them, then stop.
+    prompt: |
+      You handle catalog queries (products, stock, inventory).
+      Always use tools for data. Never invent fields.
+      Match the user's language.
+
+  analytics:
+    tools:
+      - ask_user
+      - list_reports
+      - get_report_model
+      - plan_report_request
+      - run_report
+      - upsert_report_definition
+      - persist_report_chart
+    keywords:
+      - report
+      - reports
+      - analytics
+      - revenue
+      - chart
+      - charts
+      - graph
+      - graphique
+      - kpi
+      - dashboard
+      - classement
+      - statistiques
+      - top clients
+      - top products
+      - best selling
+    hint: |
+      ## Active pack: analytics
+      Prefer run_report for chart/KPI questions, then stop.
+    prompt: |
+      You handle analytics queries (reports, charts, KPIs).
+      Always use tools for data. Never invent numbers.
+      Match the user's language.
+
+planner:
+  system_prompt: |
+    You route questions to one specialist pack, or finish.
+
+    Packs:
+    - billing: invoices, clients, payments
+    - catalog: products, stock, inventory, warehouse
+    - analytics: reports, charts, KPIs, revenue, rankings
+
+    Rules:
+    - Sales ranking, revenue, charts, KPIs, reports → analytics first.
+    - Stock / SKU / warehouse only → catalog.
+    - Invoices / clients / payments → billing.
+    - After analytics has run on a chart/KPI/report question: finish.
+    - After a specialist already ran: finish if the question can be answered; otherwise pick a different unused pack.
+    - Greetings / capability questions → default pack (unless a final reply already exists — then finish).
+    - Never pick a pack listed as already visited.
+    - Reply with JSON only: {"next":"<pack_name>|finish","reason":"short"}
+
+server:
+  host: "0.0.0.0"
+  port: 6969
+
+# LangSmith: optional observability. Secrets stay in .env.
+# Env LANGSMITH_TRACING / LANGSMITH_PROJECT override enabled / project when set.
+tracing:
+  enabled: false
+  project: graph-agent
+  run_name_template: "{agent}/{mode}/{thread_id}"
+  tags: [graph-agent]
+  metadata_keys:
+    - conversation_id
+    - tenant_id
+    - user_id
+    - agent_id
+    - session_id
+
+tools:
+  ask_user: { risk: hitl }
+  get_invoice: { risk: read_only }
+  list_invoices: { risk: read_only }
+  search_invoices: { risk: read_only }
+  get_payment: { risk: read_only }
+  list_payments: { risk: read_only }
+  get_client: { risk: read_only }
+  list_clients: { risk: read_only }
+  search_clients: { risk: read_only }
+  get_product: { risk: read_only }
+  list_products: { risk: read_only }
+  get_stock_level: { risk: read_only }
+  list_stock_movements: { risk: read_only }
+  list_reports: { risk: read_only }
+  get_report_model: { risk: read_only }
+  plan_report_request: { risk: read_only }
+  run_report: { risk: read_only }
+  upsert_report_definition: { risk: mutating, confirm: true }
+  persist_report_chart: { risk: mutating, confirm: true }
